@@ -1,0 +1,1092 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="net.musicrecommend.www.recommend.RecommendMapper">
+	
+	<insert id="insertRecommend" parameterType="RecommendVO">
+		insert into tb_recommend(user_no, album_key, song_key, artist_key, star_point, comment)
+		values(#{user_no},#{album_key},#{song_key},#{artist_key},#{star_point},#{comment})
+		
+	</insert>
+	<update id="updateRecommend" parameterType="RecommendVO">
+		update tb_recommend set star_point=#{star_point}, comment=#{comment}
+		where user_no = #{user_no} and song_key = #{song_key}
+	</update>
+	
+	<select id="checkRecommendExist" parameterType="RecommendVO" resultType="int">
+		select count(user_no) as cnt from tb_recommend
+		where user_no = #{user_no} and song_key = #{song_key}
+	</select>
+	
+	<select id="getUserRecommendList" parameterType="long" resultType="RecommendVO">
+		select *
+		from tb_recommend
+		where user_no = #{user_no}
+	</select>
+	
+	<select id="getNullalbmSongs" resultType="SongVO">
+		select song_key, song_name, artist_name from tb_song
+	</select>
+	<update id="insertNullalbum" parameterType="SongVO">
+		update tb_song set album_name = #{album_name} where song_key = #{song_key}
+	</update>
+	
+	
+	
+	<select id="checkCommentExist" parameterType="RecommendVO" resultType="int">
+		select count(user_no) as cnt
+		from tb_recommend
+		where user_no = #{user_no} and song_key = #{song_key} and album_key = #{album_key} 
+	</select>
+	
+	<update id="updateUserComment" parameterType="RecommendVO">
+		update tb_recommend
+		set user_comment = #{user_comment}
+		where song_key = #{song_key} and user_no = #{user_no} and album_key = #{album_key}
+	</update>
+	
+	
+	
+	<select id="getUseRecommendInfo" parameterType="long" resultType="RecommendVO">
+		select *
+		from tb_recommend
+		where user_no = #{user_no}
+	</select>
+	
+	<select id="getCommentList" parameterType="java.util.HashMap" resultType="RecommendUserVO">
+	    select a.*
+		from (select @RNUM := @RNUM + 1 as rownum, c.*
+			  from (select r.*, u.user_nick, u.user_img, u.user_uuid, u.user_id
+						from tb_recommend r join tb_user u
+						on r.user_no = u.user_no
+						where song_key = #{recommendVO.song_key} and album_key = #{recommendVO.album_key} and user_comment is not null) c join (select @RNUM := 0) rn
+			  order by recommend_no desc) a
+		where rownum between #{pgNation.start_num} and #{pgNation.end_num};
+	</select>
+	
+	
+	<select id="getStarPointSubtotal" parameterType="RecommendVO" resultType="DetailChartVO">
+		select star_point, count(star_point) as cnt  
+		from tb_recommend  
+		where song_key = #{song_key} and album_key = #{album_key}
+		group by star_point
+	</select>
+	
+	<select id="getStarPointAvg" parameterType="RecommendVO" resultType="DetailChartVO">
+		select avg(star_point) as avg_star_point, count(star_point) as cnt
+		from tb_recommend
+		where song_key = #{song_key} and album_key = #{album_key}
+	</select>
+
+	
+	
+	<!-- 상위검색어 10개 -->
+ 	<select id="getSearchKeywordList" resultType="KeywordVO">
+ 		select * from tb_keyword 
+		where datediff(now(),regdate) &lt; 2
+		order by count desc, regdate desc
+		limit 10
+ 	</select>
+ 	
+<!--  	List<SongVO> getHighRatedSongs() throws Exception; -->
+
+<!-- 	List<AlbumVO> getHighRatedAlbums() throws Exception; -->
+
+<!-- 	List<ArtistVO> getHighRatedArtists() throws Exception; -->
+	<!-- 고평점 노래 10개 -->
+	<select id="getHighRatedSongs" resultType="SongVO">
+		select * 
+		from (select song_key, avg(star_point) as avg_point ,count(song_key) as count
+			from tb_recommend
+			group by song_key
+			having count>1
+			order by avg(star_point) desc
+			) R
+		join tb_song a
+		on a.song_key = R.song_key
+		order by R.avg_point desc
+		limit 10
+	</select>
+	<!-- 고평점 앨범 10개 -->
+	<select id="getHighRatedAlbums" resultType="AlbumVO">
+		select * 
+		from (select album_key, avg(star_point) as avg_point ,count(album_key) as count
+			from tb_recommend
+			group by album_key
+			having count>1
+			order by avg(star_point) desc
+			) R
+		join tb_album a
+		on a.album_key = R.album_key
+		order by R.avg_point desc
+		limit 10
+	</select>
+	<!-- 고평점 아티스트 10개 -->
+	<select id="getHighRatedArtists" resultType="ArtistVO">
+		select * 
+		from (select artist_key, avg(star_point) as avg_point ,count(artist_key) as count
+			from tb_recommend
+			group by artist_key
+			having count(artist_key)>1
+			order by avg(star_point) desc
+			) R
+		join tb_artist a
+		on a.artist_key = R.artist_key
+		order by R.avg_point desc
+		limit 10
+	</select>
+	<!-- 고평점 아티스트 기본 장르별 -->
+	<select id="getHighRatedArtistsDefault" resultType="ArtistVO" parameterType="String">
+		select * 
+	from (select r.user_no, r.artist_key, avg(r.star_point) as avg_point ,count(r.artist_key) as count
+		from tb_recommend r
+		group by r.artist_key
+		having count(r.artist_key)>1 
+		order by avg(r.star_point) desc	
+		) R
+	join tb_artist a
+	on a.artist_key = R.artist_key
+	where a.genre_names like CONCAT('%',#{genre},'%') 
+	order by R.avg_point desc
+	</select>
+	<!-- 고평점 아티스트에서 유저가 평가하지 않은 기본 장르별 -->
+	<select id="getHighRatedArtistsUser" parameterType="map" resultType="ArtistVO">
+		select * 
+		from (select r.user_no, r.artist_key, avg(r.star_point) as avg_point ,count(r.artist_key) as count
+			from tb_recommend r
+			group by r.artist_key
+			having count(r.artist_key)>3 and r.user_no != #{user_no}
+			order by avg_point,count desc	
+			) R
+		join tb_artist a
+		on a.artist_key = R.artist_key
+		where a.genre_names like CONCAT('%',#{genre},'%')  
+		order by R.avg_point desc 
+		limit 10
+	</select>
+	
+	<!-- xxx년대 히트송 가수별 -->
+	<select id='getXCenturySongs' parameterType="String" resultType="SongVO">
+		select * from tb_song ori
+		join (select min(song_key) as song_key,artist_key,artist_name 
+				from tb_song where is_hit_song and issue_date like CONCAT(#{year} ,'%')
+				group by artist_key
+				order by rand()) sub
+		on sub.song_key = ori.song_key
+		limit 30
+	</select>
+	
+	<!-- 별점 순위 -->
+	<select id="getRecommendRank" resultType="java.util.HashMap">
+		select u.user_id,u.user_nick,r.user_no,count(r.user_no) as count
+		from tb_recommend r
+			join tb_user u
+			on u.user_no = r.user_no
+		group by r.user_no
+		order by count desc
+		limit 10
+	</select>
+	
+	<!-- 19금-_- -->
+	<select id="getAdultSongList" resultType="SongVO">
+		select * from tb_song ori
+		join (select min(song_key) as song_key,artist_key,artist_name from tb_song where is_adult
+		group by artist_key
+		order by rand()) sub
+		on sub.song_key = ori.song_key
+		limit 30
+	</select>
+	<!-- 서바이벌 프로그램 -->
+	
+	<select id="getSurvivalSongList" resultType="SongVO">
+		select * from tb_song
+		where 
+		album_name like '%Produce 101%' or
+		album_name like '%쇼미더머니%' or
+		album_name like '%서바이벌 나는 가수다%' or
+		album_name like '%복면가왕%' or
+		album_name like '%슈퍼스타k%' or
+		album_name like '%보이스코리아%'
+		order by rand()
+		limit 32
+	</select>
+	
+	
+	
+	
+	
+	<!-- 권우 추가 -->
+	<!-- 대한민국 갯수 -->
+	<select id="koreaCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)		 			  
+						and nationality_name = '대한민국')
+	</select>
+	<!-- 대한민국 출력 -->
+	<select id="koreaList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)	 			  
+											
+						and nationality_name = '대한민국')
+	       order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 아메리카 갯수 -->
+	<select id="americaCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and nationality_name = '미국'
+						or nationality_name = '캐나다'
+						or nationality_name = '자마이카')
+	</select>	
+	<!-- 아메리카 출력 -->
+	<select id="americaList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and nationality_name = '미국'
+						or nationality_name = '캐나다'
+						or nationality_name = '자마이카')
+	      order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 아시아 갯수 -->
+	<select id="asiaCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and nationality_name = '중국'
+						or nationality_name = '일본')
+	</select>	
+	<!-- 아시아 출력 -->
+	<select id="asiaList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and nationality_name = '중국'
+						or nationality_name = '일본')
+	      order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>  	
+	
+	<!-- 유럽 갯수 -->
+	<select id="europeCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and nationality_name = '영국'
+						or nationality_name = '독일'
+						or nationality_name = '이탈리아'
+						or nationality_name = '노르웨이'
+						or nationality_name = '프랑스'
+						or nationality_name = '스페인'
+						or nationality_name = '아일랜드'
+						or nationality_name = '러시아'
+						or nationality_name = '그리스'
+						or nationality_name = '체코'
+						or nationality_name = '헝가리'
+						or nationality_name = '핀란드')
+	</select>	
+	<!-- 유럽 출력 -->
+	<select id="europeList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where artist_key in (select artist_key				
+								from tb_artist					
+								where artist_key in (select artist_key
+				    								from tb_recommend
+							    					where user_no not in (select user_no
+													 			  		from tb_user
+													 			  		where user_id = #{user_id})
+													group by artist_key
+					   								having avg(star_point)>=4.0)
+								and nationality_name = '영국'
+								or nationality_name = '독일'
+								or nationality_name = '이탈리아'
+								or nationality_name = '노르웨이'
+								or nationality_name = '프랑스'
+								or nationality_name = '스페인'
+								or nationality_name = '아일랜드'
+								or nationality_name = '러시아'
+								or nationality_name = '그리스'
+								or nationality_name = '체코'
+								or nationality_name = '헝가리'
+								or nationality_name = '핀란드')
+	      order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select> 
+	
+	<!-- 걸그룹 갯수 -->
+	<select id="group_girlCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no = (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and act_type_name='그룹'
+						and sex='F')
+	</select>	
+	<!-- 걸그룹 출력 -->
+	<select id="group_girlList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and act_type_name='그룹'
+						and sex='F')
+	      order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select> 
+	
+	<!-- 보이그룹 갯수 -->
+	<select id="group_boyCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and act_type_name='그룹'
+						and sex='M')
+	</select>	
+	<!-- 보이그룹 출력 -->
+	<select id="group_boyList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and act_type_name='그룹'
+						and sex='M')
+	      order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select> 
+	
+	<!-- 혼성그룹 갯수 -->
+	<select id="group_hybridCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and act_type_name='그룹'
+						and sex='H')
+	</select>	
+	<!-- 혼성그룹 출력 -->
+	<select id="group_hybridList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and act_type_name='그룹'
+						and sex='H')
+	      order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 여성솔로 갯수 -->
+	<select id="solo_girlCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			 where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and act_type_name='솔로'
+						and sex='F')
+	</select>	
+	<!-- 여성솔로 출력 -->
+	<select id="solo_girlList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and act_type_name='솔로'
+						and sex='F')
+	      order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 남성솔로 갯수 -->
+	<select id="solo_boyCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and act_type_name='솔로'
+						and sex='M')
+	</select>	
+	<!-- 남성솔로 출력 -->
+	<select id="solo_boyList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where artist_key in (select artist_key				
+						from tb_artist					
+						where artist_key in (select artist_key
+				    						from tb_recommend
+							    			where user_no not in (select user_no
+													 			  from tb_user
+													 			  where user_id = #{user_id})
+											group by artist_key
+					   						having avg(star_point)>=4.0)
+						and act_type_name='솔로'
+						and sex='M')
+	      order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 키워드:거짓말 갯수 -->
+	<select id="keyword_lieCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  		from tb_user
+					     			  		 where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%거짓말%'   
+	</select>
+	<!-- 키워드:거짓말 출력 -->
+	<select id="keyword_lieList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%거짓말%' 					    
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 키워드:리메이크 갯수 -->
+	<select id="keyword_RemakeCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%리메이크%'
+	or song_name like '%remake%'   
+	</select>
+	<!-- 키워드:리메이크 출력 -->
+	<select id="keyword_RemakeList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%리메이크%'
+		 or song_name like '%remake%'					    
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 키워드:리믹스 갯수 -->
+	<select id="keyword_RemixCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%remix%'   
+	</select>
+	<!-- 키워드:리믹스 출력 -->
+	<select id="keyword_RemixList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%remix%' 					    
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 키워드:믿음 갯수 -->
+	<select id="keyword_trustCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%믿음%'   
+	</select>
+	<!-- 키워드:믿음 출력 -->
+	<select id="keyword_trustList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%믿음%' 					    
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 키워드:사랑 갯수 -->
+	<select id="keyword_loveCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%사랑%'   
+	or song_name like '%love%' 
+	</select>
+	<!-- 키워드:사랑 출력 -->
+	<select id="keyword_loveList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%사랑%' 
+		 or song_name like '%love%' 					    
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+
+	<!-- 키워드:생일 갯수 -->
+	<select id="keyword_birthdayCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%생일%'
+	or song_name like '%birthday%'   
+	</select>
+	<!-- 키워드:생일 출력 -->
+	<select id="keyword_birthdayList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%생일%'
+		 or song_name like '%birthday%'  					    
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 키워드:소원 갯수 -->
+	<select id="keyword_wishCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%소원%'
+	or song_name like '%hope%'
+	or song_name like '%wish%'     
+	</select>
+	<!-- 키워드:소원 출력 -->
+	<select id="keyword_wishList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%소원%'
+		 or song_name like '%hope%'
+		 or song_name like '%wish%'  					    
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 키워드:시간 갯수 -->
+	<select id="keyword_timeCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%시간%'
+	or song_name like '%time%'
+	</select>
+	<!-- 키워드:시간 출력 -->
+	<select id="keyword_timeList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%시간%'
+		 or song_name like '%time%'  					    
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 키워드:이별 갯수 -->
+	<select id="keyword_partingCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%이별%'
+	</select>
+	<!-- 키워드:이별 출력 -->
+	<select id="keyword_partingList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%이별%'
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 키워드:이야기 갯수 -->
+	<select id="keyword_storyCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%이야기%'
+	or song_name like '%story%'
+	</select>
+	<!-- 키워드:이야기 출력 -->
+	<select id="keyword_storyList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%이야기%'
+		 or song_name like '%story%'
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 키워드:친구 갯수 -->
+	<select id="keyword_friendCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%친구%'
+	or song_name like '%friend%'
+	</select>
+	<!-- 키워드:친구 출력 -->
+	<select id="keyword_friendList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%친구%'
+		 or song_name like '%friend%'
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 키워드:톡 갯수 -->
+	<select id="keyword_talkCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key in (select song_key
+				  	  from tb_recommend
+				  	  where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   group by song_key
+					   having avg(star_point)>=4.0)
+	and song_name like '%톡%'
+	or song_name like '%talk%'
+	</select>
+	<!-- 키워드:톡 출력 -->
+	<select id="keyword_talkList" parameterType="java.util.Map" resultType="SongVO">
+	select A.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key in (select song_key
+							from tb_recommend
+				  	  		where user_no not in (select user_no
+					          		  			  from tb_user
+					     			  			  where user_id = #{user_id})
+					   		group by song_key
+					   		having avg(star_point)>=4.0) 
+		 and song_name like '%톡%'
+		 or song_name like '%talk%'
+		 order by issue_date desc)A
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+		
+	<!-- 선호 가수 갯수 -->
+	<select id="favorite_singerCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where artist_key in (select A.artist_key
+					 	 from (select count(artist_key) as countA, artist_key
+				  	     	   from tb_recommend
+				  	       		where user_no in (select user_no
+					          				  	   from tb_user
+					     			  			   where user_id = #{user_id})
+					       		group by artist_key
+					       		order by countA desc
+					       		limit 5)A)
+	and song_key not in(select song_key
+						from tb_recommend
+						where user_no in (select user_no
+					          		  	  from tb_user
+					     			  	  where user_id = #{user_id}))
+	</select>
+	<!-- 선호가수 출력 -->
+	<select id="favorite_singerList" parameterType="java.util.Map" resultType="SongVO">
+	select B.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where artist_key in (select A.artist_key
+					 	 	   from (select count(artist_key) as countA, artist_key
+				  	     	   		 from tb_recommend
+				  	       			 where user_no in (select user_no
+					          				  	   from tb_user
+					     			  			   where user_id = #{user_id})
+					       			 group by artist_key
+					       			 order by countA desc
+					       			 limit 5)A)
+		  and song_key not in(select song_key
+				   			 from tb_recommend
+							 where user_no in (select user_no
+					          		  	 		from tb_user
+					     			  	  		where user_id = #{user_id}))  
+		  order by issue_date desc)B
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<select id="getTotalCommentCount" resultType="long" parameterType="RecommendVO">
+		select count(*)
+		from tb_recommend
+		where song_key = #{song_key} and album_key = #{album_key} and user_comment is not null
+	</select>
+	
+	<!-- 선호 출시연도 갯수 -->
+	<select id="favorite_issue_dateCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key not in (select song_key
+						from tb_recommend
+						 where user_no in (select user_no
+	          								from tb_user
+	     			  						where user_id = #{user_id}))
+	and issue_date in (select A.YYYY
+						from(select count(substring(issue_date,1,4)) as countD, substring(issue_date,1,4) as YYYY
+	 					 	from tb_song
+	 					 	where song_key in (select song_key
+				  	    				    	from tb_recommend
+				  	     						where user_no in (select user_no
+					          					from tb_user
+					     			  			where user_id = #{user_id}))
+						 	group by issue_date
+	 					 	order by countD desc	
+	 					 	limit 5)A)	
+	</select>
+	<!-- 선호 출시연도 출력 -->
+	<select id="favorite_issue_dateList" parameterType="java.util.Map" resultType="SongVO">
+	select B.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key not in (select song_key
+								 from tb_recommend
+						 		 where user_no in (select user_no
+	          									   from tb_user
+	     			  							   where user_id = #{user_id}))
+		 and issue_date in (select A.YYYY
+							from(select count(substring(issue_date,1,4)) as countD, substring(issue_date,1,4) as YYYY
+	 					 		 from tb_song
+	 					 		 where song_key in (select song_key
+				  	    				    		from tb_recommend
+				  	     							where user_no in (select user_no
+					          										  from tb_user
+					     			  								  where user_id = #{user_id}))
+						 		group by issue_date
+	 					 		order by countD desc	
+	 					 		limit 5)A)		    
+		 order by issue_date desc)B
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<!-- 선호 플레이타임 갯수 -->
+	<select id="favorite_play_timeCount" parameterType="String" resultType="long">
+	select count(*)
+	from tb_song
+	where song_key not in (select song_key
+						from tb_recommend
+						 where user_no in (select user_no
+	          								from tb_user
+	     			  						where user_id = 'test3'))	     			  						
+	and substring(play_time,1,2)*10 in (select substring(truncate(avg(play_time),0),1,2)*10
+	 			  						from tb_song
+	 			  						where song_key in (select song_key
+				  	    			 						from tb_recommend
+				  	     			  						where user_no in (select user_no
+					          						    				 	  from tb_user
+					     			  									 	  where user_id = #{user_id})))
+	
+	</select>
+	<!-- 선호 출시연도 출력 -->
+	<select id="favorite_play_timeList" parameterType="java.util.Map" resultType="SongVO">
+	select B.*
+	from (select @rownum:=@rownum+1 as rownum, s.*	
+		  from tb_song s join (select @rownum := 0) r
+		  where song_key not in (select song_key
+						from tb_recommend
+						 where user_no in (select user_no
+	          								from tb_user
+	     			  						where user_id = 'test3'))	     			  						
+		 and substring(play_time,1,2)*10 in (select substring(truncate(avg(play_time),0),1,2)*10
+	 			  							 from tb_song
+	 			  							 where song_key in (select song_key
+				  	    			 							from tb_recommend
+				  	     			  							where user_no in (select user_no
+					          						    				 	  	  from tb_user
+					     			  									 	  	  where user_id = #{user_id})))	 
+		 order by issue_date desc)B
+	where rownum between #{start_num} and #{end_num}	
+	</select>
+	
+	<select id="getRecommendCount" resultType="long" parameterType="long">
+		select count(star_point) as cnt
+		from tb_recommend
+		where user_no =  #{user_no}
+	</select>
+	
+	<select id="getUserRecommendTotalCount" resultType="long" parameterType="long">
+		select count(song_key)
+		from tb_recommend
+		where user_no = #{user_no}
+	</select>
+	
+</mapper>
+ 
+ 
